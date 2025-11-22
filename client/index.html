@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Realtime STT</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+
+<body>
+<h3>Realtime Speech-to-Text (faster-whisper)</h3>
+
+<button id="startBtn">Start</button>
+<button id="stopBtn" disabled>Stop</button>
+
+<p><strong>Transcript:</strong></p>
+<div id="output" style="padding:10px;border:1px solid #ccc;width:400px;height:200px;overflow:auto;"></div>
+
+<script>
+let ws;
+let mediaRecorder;
+
+$("#startBtn").click(async function () {
+
+    // Check microphone
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        alert("Microphone not supported");
+        return;
+    }
+
+    try {
+        // Ask permission
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+        // Create websocket
+        ws = new WebSocket("ws://localhost:8000/ws/stt"); //use wss for production
+
+        ws.onmessage = (event) => {
+            $("#output").append(event.data + "<br>");
+        };
+
+        // Setup audio recorder
+        mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+
+        mediaRecorder.ondataavailable = (e) => {
+            if (e.data.size > 0 && ws.readyState === 1) {
+                e.data.arrayBuffer().then(buffer => {
+                    ws.send(buffer); // send binary
+                });
+            }
+        };
+
+        mediaRecorder.start(250); // send every 250ms (good for realtime)
+
+        $("#startBtn").prop("disabled", true);
+        $("#stopBtn").prop("disabled", false);
+
+    } catch (err) {
+        alert("Microphone permission denied");
+        console.error(err);
+    }
+});
+
+$("#stopBtn").click(function () {
+    mediaRecorder.stop();
+    ws.close();
+
+    $("#startBtn").prop("disabled", false);
+    $("#stopBtn").prop("disabled", true);
+});
+</script>
+</body>
+</html>
